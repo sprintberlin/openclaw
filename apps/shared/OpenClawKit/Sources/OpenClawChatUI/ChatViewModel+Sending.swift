@@ -623,6 +623,7 @@ extension OpenClawChatViewModel {
                     thinkingSignature: nil,
                     mimeType: payload.mimeType,
                     fileName: payload.fileName,
+                    sizeBytes: attachment.data.count,
                     durationSeconds: attachment.durationSeconds,
                     content: AnyCodable(payload.content),
                     id: nil,
