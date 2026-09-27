@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
+import { Session } from "node:inspector";
 import { constants, PerformanceObserver } from "node:perf_hooks";
 import { getHeapStatistics } from "node:v8";
 import { MessagePort, resourceLimits, threadId } from "node:worker_threads";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { serveWorkerTasks } from "./worker-task-server.js";
 
-serveWorkerTasks((input) => {
+// Keep the inspector until worker teardown; disconnecting in its GC callback can deadlock V8.
+let baselineInspector: Session | undefined;
+
+serveWorkerTasks(async (input) => {
   assert.ok(isRecord(input));
   if (input.receipt instanceof MessagePort) {
     const receipt = input.receipt;
@@ -35,6 +39,21 @@ serveWorkerTasks((input) => {
       }),
     );
     return { heap: before, checksum: payload[0]! + payload.at(-1)!, threadId, resourceLimits };
+  }
+  if (!baselineInspector) {
+    // Remove startup garbage before measuring the later allocation growth.
+    const session = new Session();
+    session.connect();
+    baselineInspector = session;
+    await new Promise<void>((resolve, reject) => {
+      session.post("HeapProfiler.collectGarbage", (error) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve();
+        }
+      });
+    });
   }
   return { heap: getHeapStatistics().used_heap_size, threadId, resourceLimits };
 });
